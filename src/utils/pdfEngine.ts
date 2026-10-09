@@ -131,7 +131,7 @@ export async function renderPageCanvas(
 }
 
 /**
- * Export and save modified PDF document with metadata & all elements
+ * Export and save modified PDF document with user-customized metadata & all elements
  */
 export async function saveModifiedPDF(
   originalPdfBuffer: ArrayBuffer,
@@ -143,7 +143,7 @@ export async function saveModifiedPDF(
   const srcDoc = await PDFDocument.load(originalPdfBuffer, { ignoreEncryption: true });
   const destDoc = await PDFDocument.create();
 
-  // Apply Document Metadata
+  // Apply Document Metadata including User Custom Creation & Modification Dates
   if (metadata) {
     if (metadata.title) destDoc.setTitle(metadata.title);
     if (metadata.author) destDoc.setAuthor(metadata.author);
@@ -154,7 +154,15 @@ export async function saveModifiedPDF(
     }
     if (metadata.creator) destDoc.setCreator(metadata.creator);
     if (metadata.producer) destDoc.setProducer(metadata.producer);
-    destDoc.setModificationDate(new Date());
+
+    if (metadata.creationDate) {
+      const cDate = new Date(metadata.creationDate);
+      if (!isNaN(cDate.getTime())) destDoc.setCreationDate(cDate);
+    }
+    if (metadata.modificationDate) {
+      const mDate = new Date(metadata.modificationDate);
+      if (!isNaN(mDate.getTime())) destDoc.setModificationDate(mDate);
+    }
   }
 
   const fonts = {
@@ -192,7 +200,6 @@ export async function saveModifiedPDF(
       const pdfY = pageHeight - el.y - el.height;
 
       // 1. Cover original text box with solid whiteout background patch
-      // Ensure whiteout box uses precise on-screen element coordinates (boxX, boxY) so it never covers unrelated header text!
       if (el.isOriginalText && el.backgroundColor) {
         const origBox = el.originalBoundingBox;
         const useOrig = origBox && Math.abs(origBox.y - el.y) < 15 && Math.abs(origBox.x - el.x) < 20;

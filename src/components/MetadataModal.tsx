@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import type { PDFMetadata } from '../types/pdf';
-import { X, FileText, User, Tag, Calendar, Save, Info, ShieldCheck } from 'lucide-react';
+import { X, FileText, User, Tag, Calendar, Save, Info, ShieldCheck, Clock } from 'lucide-react';
 
 interface MetadataModalProps {
   isOpen: boolean;
@@ -17,6 +17,19 @@ export const MetadataModal: React.FC<MetadataModalProps> = ({
 }) => {
   const [form, setForm] = useState<PDFMetadata>(metadata);
 
+  // Convert ISO string or Date string to HTML datetime-local format YYYY-MM-DDTHH:mm
+  const toDatetimeLocal = (isoString?: string) => {
+    if (!isoString) return '';
+    try {
+      const d = new Date(isoString);
+      if (isNaN(d.getTime())) return '';
+      const pad = (n: number) => (n < 10 ? '0' + n : n);
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    } catch {
+      return '';
+    }
+  };
+
   useEffect(() => {
     setForm(metadata);
   }, [metadata, isOpen]);
@@ -24,11 +37,22 @@ export const MetadataModal: React.FC<MetadataModalProps> = ({
   if (!isOpen) return null;
 
   const handleSave = () => {
-    onSaveMetadata({
+    onSaveMetadata(form);
+    onClose();
+  };
+
+  const handleSetCurrentModificationDate = () => {
+    setForm({
       ...form,
       modificationDate: new Date().toISOString(),
     });
-    onClose();
+  };
+
+  const handleSetCurrentCreationDate = () => {
+    setForm({
+      ...form,
+      creationDate: new Date().toISOString(),
+    });
   };
 
   return (
@@ -43,7 +67,7 @@ export const MetadataModal: React.FC<MetadataModalProps> = ({
                 Informações e Metadados do Documento
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Histórico de edição e propriedades do arquivo PDF.
+                Altere os metadados e as datas registradas no arquivo PDF.
               </p>
             </div>
           </div>
@@ -61,7 +85,7 @@ export const MetadataModal: React.FC<MetadataModalProps> = ({
           <div className="p-3 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/60 rounded-xl flex items-start space-x-2 text-xs text-blue-900 dark:text-blue-200">
             <ShieldCheck className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
             <span>
-              Estes dados serão incorporados ao arquivo PDF final para fins de autoria, auditoria e indexação.
+              Você pode alterar livremente o Título, Autor, Criador e as <b>Datas de Criação e Modificação</b> gravadas no cabeçalho do PDF.
             </span>
           </div>
 
@@ -75,7 +99,7 @@ export const MetadataModal: React.FC<MetadataModalProps> = ({
               type="text"
               value={form.title}
               onChange={(e) => setForm({ ...form, title: e.target.value })}
-              placeholder="Ex: Contrato de Prestação de Serviços"
+              placeholder="Ex: Nota Fiscal Eletrônica"
               className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 outline-none"
             />
           </div>
@@ -90,7 +114,7 @@ export const MetadataModal: React.FC<MetadataModalProps> = ({
               type="text"
               value={form.author}
               onChange={(e) => setForm({ ...form, author: e.target.value })}
-              placeholder="Ex: Nome do Editor ou Empresa"
+              placeholder="Ex: Nome do Autor ou Empresa"
               className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 outline-none"
             />
           </div>
@@ -104,7 +128,7 @@ export const MetadataModal: React.FC<MetadataModalProps> = ({
               type="text"
               value={form.subject}
               onChange={(e) => setForm({ ...form, subject: e.target.value })}
-              placeholder="Ex: Nota Fiscal de Serviços - Edição de Campos"
+              placeholder="Ex: Nota Fiscal de Serviços"
               className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 outline-none"
             />
           </div>
@@ -119,7 +143,7 @@ export const MetadataModal: React.FC<MetadataModalProps> = ({
               type="text"
               value={form.keywords}
               onChange={(e) => setForm({ ...form, keywords: e.target.value })}
-              placeholder="Ex: nota fiscal, contrato, editado, 2026"
+              placeholder="Ex: nota fiscal, tijucas, 2024"
               className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 outline-none"
             />
           </div>
@@ -150,15 +174,69 @@ export const MetadataModal: React.FC<MetadataModalProps> = ({
             </div>
           </div>
 
-          {/* Dates Display */}
-          <div className="pt-2 border-t border-slate-200 dark:border-slate-800 grid grid-cols-2 gap-3 text-xs text-slate-500 dark:text-slate-400">
-            <div className="flex items-center space-x-1.5">
-              <Calendar className="w-3.5 h-3.5" />
-              <span>Data de Criação: {form.creationDate ? new Date(form.creationDate).toLocaleString() : 'N/A'}</span>
-            </div>
-            <div className="flex items-center space-x-1.5">
-              <Calendar className="w-3.5 h-3.5 text-blue-500" />
-              <span>Última Modificação: {form.modificationDate ? new Date(form.modificationDate).toLocaleString() : 'Agora'}</span>
+          {/* EDITABLE DATES SECTION */}
+          <div className="pt-3 border-t border-slate-200 dark:border-slate-800 space-y-3">
+            <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider flex items-center space-x-1.5">
+              <Calendar className="w-4 h-4 text-blue-500" />
+              <span>Datas de Registro no PDF</span>
+            </h4>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* Creation Date Input */}
+              <div className="space-y-1.5 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center space-x-1">
+                    <Calendar className="w-3.5 h-3.5 text-slate-500" />
+                    <span>Data de Criação</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleSetCurrentCreationDate}
+                    className="text-[10px] font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center space-x-0.5"
+                  >
+                    <Clock className="w-3 h-3 inline mr-0.5" />
+                    <span>Agora</span>
+                  </button>
+                </div>
+                <input
+                  type="datetime-local"
+                  step="1"
+                  value={toDatetimeLocal(form.creationDate)}
+                  onChange={(e) => {
+                    const dt = e.target.value ? new Date(e.target.value).toISOString() : '';
+                    setForm({ ...form, creationDate: dt });
+                  }}
+                  className="w-full px-2.5 py-1.5 text-xs border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 outline-none font-mono"
+                />
+              </div>
+
+              {/* Modification Date Input */}
+              <div className="space-y-1.5 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center space-x-1">
+                    <Calendar className="w-3.5 h-3.5 text-blue-500" />
+                    <span>Data de Modificação</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleSetCurrentModificationDate}
+                    className="text-[10px] font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center space-x-0.5"
+                  >
+                    <Clock className="w-3 h-3 inline mr-0.5" />
+                    <span>Agora</span>
+                  </button>
+                </div>
+                <input
+                  type="datetime-local"
+                  step="1"
+                  value={toDatetimeLocal(form.modificationDate)}
+                  onChange={(e) => {
+                    const dt = e.target.value ? new Date(e.target.value).toISOString() : '';
+                    setForm({ ...form, modificationDate: dt });
+                  }}
+                  className="w-full px-2.5 py-1.5 text-xs border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 outline-none font-mono"
+                />
+              </div>
             </div>
           </div>
         </div>
