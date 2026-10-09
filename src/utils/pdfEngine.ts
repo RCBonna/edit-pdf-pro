@@ -14,7 +14,7 @@ export interface PDFLoadResult {
 }
 
 /**
- * Load PDF data buffer and extract pages, metadata + text content
+ * Load PDF data buffer and extract pages, metadata + text content using absolute matrix transforms
  */
 export async function loadPDF(arrayBuffer: ArrayBuffer): Promise<PDFLoadResult> {
   const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer.slice(0) });
@@ -62,12 +62,13 @@ export async function loadPDF(arrayBuffer: ArrayBuffer): Promise<PDFLoadResult> 
     let itemIdx = 0;
     for (const item of textContent.items) {
       if ('str' in item && item.str.trim().length > 0) {
-        const transform = item.transform; // [scaleX, skewY, skewX, scaleY, tx, ty]
-        const tx = transform[4];
-        const ty = transform[5];
+        // Transform item matrix by viewport matrix to get true absolute page coordinates (top-left origin)
+        const pageTransform = pdfjsLib.Util.transform(viewport.transform, item.transform);
+        const absX = pageTransform[4];
+        const absY = pageTransform[5]; // Baseline Y from top of page
         
-        const fontSize = Math.round(Math.hypot(transform[0], transform[1]) || item.height || 12);
-        const pdfY = viewport.height - ty - fontSize;
+        const fontSize = Math.round(Math.hypot(item.transform[0], item.transform[1]) || item.height || 12);
+        const topY = Math.max(0, absY - fontSize);
         const fontName = item.fontName || 'Helvetica';
         const isBold = isFontNameBold(fontName);
         const fontNameMatch = normalizeFontName(fontName);
@@ -75,8 +76,8 @@ export async function loadPDF(arrayBuffer: ArrayBuffer): Promise<PDFLoadResult> 
         textItems.push({
           id: `orig-text-${i - 1}-${itemIdx++}`,
           text: item.str,
-          x: Math.max(0, tx),
-          y: Math.max(0, pdfY),
+          x: Math.max(0, absX),
+          y: Math.max(0, topY),
           width: item.width > 0 ? item.width : item.str.length * (fontSize * 0.55),
           height: item.height || fontSize * 1.2,
           fontSize: fontSize,
@@ -84,7 +85,7 @@ export async function loadPDF(arrayBuffer: ArrayBuffer): Promise<PDFLoadResult> 
           fontFamilyMatch: fontNameMatch,
           isBold: isBold,
           color: '#000000',
-          transform: transform,
+          transform: item.transform,
         });
       }
     }
@@ -191,15 +192,23 @@ export async function saveModifiedPDF(
       const pdfY = pageHeight - el.y - el.height;
 
       // 1. Cover original text box with solid whiteout background patch
+      // Ensure whiteout box uses precise on-screen element coordinates (boxX, boxY) so it never covers unrelated header text!
       if (el.isOriginalText && el.backgroundColor) {
-        const origBox = el.originalBoundingBox || { x: el.x, y: el.y, width: el.width, height: el.height };
-        const coverY = pageHeight - origBox.y - origBox.height;
+        const origBox = el.originalBoundingBox;
+        const useOrig = origBox && Math.abs(origBox.y - el.y) < 15 && Math.abs(origBox.x - el.x) < 20;
+
+        const boxX = useOrig ? origBox.x : el.x;
+        const boxY = useOrig ? origBox.y : el.y;
+        const boxW = Math.max(el.width, useOrig ? origBox.width : 0);
+        const boxH = Math.max(el.height, useOrig ? origBox.height : 0);
+
+        const coverY = pageHeight - boxY - boxH;
 
         currentPage.drawRectangle({
-          x: Math.max(0, origBox.x - 3),
-          y: coverY - 2,
-          width: origBox.width + 6,
-          height: origBox.height + 4,
+          x: Math.max(0, boxX - 1),
+          y: Math.max(0, coverY - 1),
+          width: boxW + 2,
+          height: boxH + 2,
           color: hexToRgb(el.backgroundColor || '#ffffff'),
         });
       }
