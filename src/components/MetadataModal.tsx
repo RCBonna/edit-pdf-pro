@@ -17,14 +17,14 @@ export const MetadataModal: React.FC<MetadataModalProps> = ({
 }) => {
   const [form, setForm] = useState<PDFMetadata>(metadata);
 
-  // Convert ISO string or Date string to HTML datetime-local format YYYY-MM-DDTHH:mm
+  // Convert ISO string or Date string to HTML datetime-local format YYYY-MM-DDTHH:mm:ss including SECONDS!
   const toDatetimeLocal = (isoString?: string) => {
     if (!isoString) return '';
     try {
       const d = new Date(isoString);
       if (isNaN(d.getTime())) return '';
       const pad = (n: number) => (n < 10 ? '0' + n : n);
-      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
     } catch {
       return '';
     }
@@ -85,7 +85,7 @@ export const MetadataModal: React.FC<MetadataModalProps> = ({
           <div className="p-3 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/60 rounded-xl flex items-start space-x-2 text-xs text-blue-900 dark:text-blue-200">
             <ShieldCheck className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
             <span>
-              Você pode alterar livremente o Título, Autor, Criador e as <b>Datas de Criação e Modificação</b> gravadas no cabeçalho do PDF.
+              Você pode alterar livremente o Título, Autor, Criador e as <b>Datas de Criação e Modificação (com precisão de segundos)</b> gravadas no cabeçalho do PDF.
             </span>
           </div>
 
@@ -174,11 +174,11 @@ export const MetadataModal: React.FC<MetadataModalProps> = ({
             </div>
           </div>
 
-          {/* EDITABLE DATES SECTION */}
+          {/* EDITABLE DATES SECTION WITH SECONDS PRECISION */}
           <div className="pt-3 border-t border-slate-200 dark:border-slate-800 space-y-3">
             <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider flex items-center space-x-1.5">
               <Calendar className="w-4 h-4 text-blue-500" />
-              <span>Datas de Registro no PDF</span>
+              <span>Datas de Registro no PDF (Com Horas, Minutos e Segundos)</span>
             </h4>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -229,7 +229,7 @@ export const MetadataModal: React.FC<MetadataModalProps> = ({
                 <input
                   type="datetime-local"
                   step="1"
-                  value={toDatetimeLocal(form.modificationDate)}
+                  value={toDatetimeLocal(form.creationDate || form.modificationDate)}
                   onChange={(e) => {
                     const dt = e.target.value ? new Date(e.target.value).toISOString() : '';
                     setForm({ ...form, modificationDate: dt });
