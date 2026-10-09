@@ -17,6 +17,7 @@ interface PDFCanvasProps {
   onAddElement: (element: PDFElement) => void;
   onUpdateElement: (element: PDFElement) => void;
   onDeleteElement: (id: string) => void;
+  onZoomChange?: (newZoom: number) => void;
 }
 
 export const PDFCanvas: React.FC<PDFCanvasProps> = ({
@@ -31,6 +32,7 @@ export const PDFCanvas: React.FC<PDFCanvasProps> = ({
   onSelectElement,
   onAddElement,
   onUpdateElement,
+  onZoomChange,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -51,6 +53,17 @@ export const PDFCanvas: React.FC<PDFCanvasProps> = ({
       renderPageCanvas(pdfjsDoc, currentPageIndex, canvasRef.current, zoom);
     }
   }, [pdfjsDoc, currentPageIndex, currentPageMeta, zoom]);
+
+  // Handle Ctrl + MouseWheel Zoom
+  const handleWheel = (e: React.WheelEvent) => {
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      if (!onZoomChange) return;
+      const delta = e.deltaY < 0 ? 0.1 : -0.1;
+      const nextZoom = Math.min(3.0, Math.max(0.4, +(zoom + delta).toFixed(2)));
+      onZoomChange(nextZoom);
+    }
+  };
 
   const handleStageClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!containerRef.current || !currentPageMeta) return;
@@ -79,6 +92,8 @@ export const PDFCanvas: React.FC<PDFCanvasProps> = ({
         content: 'Digite seu texto aqui',
         fontFamily: 'Helvetica',
         fontSize: 14,
+        fontWeight: 'normal',
+        fontStyle: 'normal',
         color: '#000000',
         backgroundColor: 'transparent',
       };
@@ -98,6 +113,7 @@ export const PDFCanvas: React.FC<PDFCanvasProps> = ({
         fieldName: `CampoTexto_${currentPageIndex + 1}_${Date.now().toString().slice(-4)}`,
         fontFamily: 'Helvetica',
         fontSize: 12,
+        fontWeight: 'normal',
         color: '#1e293b',
         backgroundColor: '#ffffff',
         borderColor: '#2563eb',
@@ -191,19 +207,23 @@ export const PDFCanvas: React.FC<PDFCanvasProps> = ({
       return;
     }
 
+    const isBold = item.isBold;
+
     const newEditableText: PDFElement = {
       id: `edit-orig-${Date.now()}`,
       pageIndex: currentPageIndex,
       type: 'text',
-      x: item.x,
-      y: item.y,
+      x: Math.max(0, item.x - 2),
+      y: Math.max(0, item.y - 1),
       width: Math.max(item.width + 6, 60),
       height: item.height + 4,
       content: item.text,
-      fontFamily: item.fontFamilyMatch,
+      fontFamily: isBold ? (item.fontFamilyMatch.includes('Times') ? 'Times-Bold' : 'Helvetica-Bold') : item.fontFamilyMatch,
       fontSize: item.fontSize,
+      fontWeight: isBold ? 'bold' : 'normal',
+      fontStyle: 'normal',
       color: item.color || '#000000',
-      backgroundColor: '#ffffff',
+      backgroundColor: '#ffffff', // Opaque whitepatch covering underlying PDF canvas text!
       isOriginalText: true,
       originalText: item.text,
       originalFontName: item.fontName,
@@ -267,6 +287,7 @@ export const PDFCanvas: React.FC<PDFCanvasProps> = ({
 
   return (
     <div
+      onWheel={handleWheel}
       className="flex-1 overflow-auto p-8 flex justify-center bg-slate-200/60 dark:bg-slate-950/80 relative"
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
@@ -282,6 +303,7 @@ export const PDFCanvas: React.FC<PDFCanvasProps> = ({
       >
         <canvas ref={canvasRef} className="absolute inset-0 pointer-events-none" />
 
+        {/* Extracted Original PDF Text Boxes */}
         {extractedText.map((item) => {
           const isConverted = pageElements.some(
             (el) => el.isOriginalText && el.originalBoundingBox?.x === item.x && el.originalBoundingBox?.y === item.y
@@ -302,19 +324,22 @@ export const PDFCanvas: React.FC<PDFCanvasProps> = ({
                 width: `${Math.max(item.width, 30) * zoom}px`,
                 height: `${item.height * zoom}px`,
               }}
-              className="extracted-text-box absolute border border-transparent hover:border-blue-400 hover:bg-blue-500/10 cursor-pointer transition-all rounded-sm z-10 group"
-              title={`Clique para editar este texto (Fonte: ${item.fontName || 'Helvetica'})`}
+              className="extracted-text-box absolute border border-transparent hover:border-blue-500 hover:bg-blue-500/15 cursor-pointer transition-all rounded-sm z-10 group"
+              title={`Clique para editar este texto (Fonte: ${item.fontName || 'Helvetica'}, ${item.isBold ? 'Negrito' : 'Normal'})`}
             >
-              <span className="opacity-0 group-hover:opacity-100 absolute -top-5 left-0 text-[10px] bg-blue-600 text-white px-1 rounded pointer-events-none whitespace-nowrap shadow-sm">
-                Editar Fonte Original ({item.fontFamilyMatch})
+              <span className="opacity-0 group-hover:opacity-100 absolute -top-5 left-0 text-[10px] bg-blue-600 text-white px-1.5 py-0.5 rounded shadow-md pointer-events-none whitespace-nowrap z-30">
+                Editar {item.isBold ? 'Negrito' : ''} ({item.fontFamilyMatch})
               </span>
             </div>
           );
         })}
 
+        {/* Page Elements */}
         {pageElements.map((el) => {
           const isSelected = el.id === selectedElementId;
           const isEditingInline = el.id === editingInlineId;
+          const isBold = el.fontWeight === 'bold' || el.fontFamily.includes('Bold');
+          const isItalic = el.fontStyle === 'italic' || el.fontFamily.includes('Oblique');
 
           return (
             <div
@@ -331,7 +356,7 @@ export const PDFCanvas: React.FC<PDFCanvasProps> = ({
                 top: `${el.y * zoom}px`,
                 width: `${el.width * zoom}px`,
                 height: `${el.height * zoom}px`,
-                backgroundColor: el.backgroundColor === 'transparent' ? 'transparent' : el.backgroundColor || 'transparent',
+                backgroundColor: el.backgroundColor === 'transparent' ? 'transparent' : (el.backgroundColor || '#ffffff'),
                 borderColor: el.borderColor || (isSelected ? '#2563eb' : 'transparent'),
                 borderWidth: `${(el.borderWidth || (isSelected ? 1.5 : 0)) * zoom}px`,
                 opacity: el.opacity ?? 1,
@@ -357,21 +382,25 @@ export const PDFCanvas: React.FC<PDFCanvasProps> = ({
                       style={{
                         fontFamily: getCssFontFamily(el.fontFamily),
                         fontSize: `${el.fontSize * zoom}px`,
+                        fontWeight: isBold ? '700' : '400',
+                        fontStyle: isItalic ? 'italic' : 'normal',
                         color: el.color,
                         textAlign: el.textAlign || 'left',
                       }}
-                      className="w-full h-full bg-white border border-blue-500 rounded px-1 outline-none font-sans"
+                      className="w-full h-full bg-white border border-blue-500 rounded px-1 outline-none"
                     />
                   ) : (
                     <span
                       style={{
                         fontFamily: getCssFontFamily(el.fontFamily),
                         fontSize: `${el.fontSize * zoom}px`,
+                        fontWeight: isBold ? '700' : '400',
+                        fontStyle: isItalic ? 'italic' : 'normal',
                         color: el.color,
                         textAlign: el.textAlign || 'left',
                         lineHeight: 1.1,
                       }}
-                      className="w-full truncate font-sans"
+                      className="w-full truncate"
                     >
                       {el.content}
                     </span>
@@ -380,13 +409,16 @@ export const PDFCanvas: React.FC<PDFCanvasProps> = ({
               )}
 
               {el.type === 'form-text' && (
-                <div className="w-full h-full flex items-center px-2 bg-white/80 border border-blue-500/80 rounded text-slate-800">
+                <div className="w-full h-full flex items-center px-2 bg-white/90 border border-blue-500/80 rounded text-slate-800">
                   <input
                     type="text"
                     placeholder={el.fieldName || 'Campo de formulário'}
                     value={el.content}
                     onChange={(e) => onUpdateElement({ ...el, content: e.target.value })}
-                    style={{ fontSize: `${el.fontSize * zoom}px` }}
+                    style={{
+                      fontSize: `${el.fontSize * zoom}px`,
+                      fontWeight: isBold ? '700' : '400',
+                    }}
                     className="w-full bg-transparent outline-none text-slate-900 font-medium"
                   />
                 </div>

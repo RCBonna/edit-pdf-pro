@@ -1,36 +1,48 @@
 import type { StandardFontFamily } from '../types/pdf';
 
 /**
+ * Checks if raw PDF font name indicates bold weight
+ */
+export function isFontNameBold(rawFontName: string): boolean {
+  const font = (rawFontName || '').toLowerCase();
+  return (
+    font.includes('bold') ||
+    font.includes('-b') ||
+    font.includes(',b') ||
+    font.includes('bd') ||
+    font.includes('bld') ||
+    font.includes('black') ||
+    font.includes('heavy') ||
+    font.includes('700') ||
+    font.includes('800') ||
+    font.includes('900') ||
+    font.includes('medium')
+  );
+}
+
+/**
  * Maps raw font names extracted by PDF.js to standard PDF font families
  */
 export function normalizeFontName(rawFontName: string): StandardFontFamily {
   const font = (rawFontName || '').toLowerCase();
+  const bold = isFontNameBold(font);
 
   if (font.includes('times') || font.includes('serif') || font.includes('georgia')) {
-    if (font.includes('bold')) {
-      return 'Times-Bold';
-    }
-    return 'Times-Roman';
+    return bold ? 'Times-Bold' : 'Times-Roman';
   }
 
   if (font.includes('courier') || font.includes('mono') || font.includes('code') || font.includes('typewriter')) {
-    if (font.includes('bold')) {
-      return 'Courier-Bold';
-    }
-    return 'Courier';
+    return bold ? 'Courier-Bold' : 'Courier';
   }
 
   if (font.includes('arial') || font.includes('helvetica') || font.includes('sans') || font.includes('verdana') || font.includes('trebuchet')) {
-    if (font.includes('bold')) {
-      return 'Helvetica-Bold';
-    }
     if (font.includes('oblique') || font.includes('italic')) {
       return 'Helvetica-Oblique';
     }
-    return 'Helvetica';
+    return bold ? 'Helvetica-Bold' : 'Helvetica';
   }
 
-  return 'Helvetica';
+  return bold ? 'Helvetica-Bold' : 'Helvetica';
 }
 
 /**

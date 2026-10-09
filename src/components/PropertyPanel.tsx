@@ -7,9 +7,12 @@ import {
   AlignLeft,
   AlignCenter,
   AlignRight,
+  Bold,
+  Italic,
   Sparkles,
   Sliders,
   Move,
+  Square,
 } from 'lucide-react';
 import { getCssFontFamily } from '../utils/fontMapping';
 
@@ -32,7 +35,7 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
           Nenhum elemento selecionado
         </span>
         <p className="text-xs text-slate-400 dark:text-slate-500 mt-1 max-w-[200px]">
-          Clique em qualquer texto do PDF ou elemento para ajustar fonte, tamanho, cores e propriedades.
+          Clique em qualquer texto do PDF ou elemento para ajustar fonte, negrito, tamanho, cores e propriedades.
         </p>
       </aside>
     );
@@ -51,6 +54,36 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
     'Verdana',
     'Trebuchet MS',
   ];
+
+  const isBold = selectedElement.fontWeight === 'bold' || (selectedElement.fontFamily || '').includes('Bold');
+  const isItalic = selectedElement.fontStyle === 'italic' || (selectedElement.fontFamily || '').includes('Oblique');
+
+  const toggleBold = () => {
+    const nextWeight = isBold ? 'normal' : 'bold';
+    let nextFamily = selectedElement.fontFamily;
+    if (nextWeight === 'bold') {
+      if (nextFamily.includes('Times')) nextFamily = 'Times-Bold';
+      else if (nextFamily.includes('Courier')) nextFamily = 'Courier-Bold';
+      else nextFamily = 'Helvetica-Bold';
+    } else {
+      if (nextFamily.includes('Times')) nextFamily = 'Times-Roman';
+      else if (nextFamily.includes('Courier')) nextFamily = 'Courier';
+      else nextFamily = 'Helvetica';
+    }
+    onUpdateElement({
+      ...selectedElement,
+      fontWeight: nextWeight,
+      fontFamily: nextFamily,
+    });
+  };
+
+  const toggleItalic = () => {
+    const nextStyle = isItalic ? 'normal' : 'italic';
+    onUpdateElement({
+      ...selectedElement,
+      fontStyle: nextStyle,
+    });
+  };
 
   return (
     <aside className="w-72 border-l border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col h-full select-none overflow-y-auto">
@@ -72,7 +105,7 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
       </div>
 
       <div className="p-4 space-y-5 flex-1">
-        {/* Original Font Detection Info Box if available */}
+        {/* Original Font Detection Info Box */}
         {selectedElement.isOriginalText && (
           <div className="p-3 rounded-xl bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200/80 dark:border-blue-900/60">
             <div className="flex items-center space-x-1.5 text-blue-700 dark:text-blue-300 font-semibold text-xs mb-1">
@@ -80,10 +113,10 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
               <span>Fonte Detectada no PDF Original</span>
             </div>
             <p className="text-[11px] text-blue-900 dark:text-blue-200 font-medium">
-              Fonte Original: <code className="bg-blue-100 dark:bg-blue-900 px-1 rounded text-[10px]">{selectedElement.originalFontName || 'Helvetica'}</code>
+              Fonte: <code className="bg-blue-100 dark:bg-blue-900 px-1 rounded text-[10px]">{selectedElement.originalFontName || 'Helvetica'}</code>
             </p>
             <p className="text-[10px] text-blue-600 dark:text-blue-400 mt-1">
-              As alterações serão renderizadas com a fonte correspondente no PDF final.
+              {isBold ? '● Estilo Negrito ativo' : '○ Estilo Normal'} (O fundo branco oculta o texto original por baixo).
             </p>
           </div>
         )}
@@ -103,24 +136,59 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
           </div>
         )}
 
-        {/* Font Family Picker */}
+        {/* Font Family & Styles */}
         {selectedElement.type === 'text' && (
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-              Família da Fonte
-            </label>
-            <select
-              value={selectedElement.fontFamily}
-              onChange={(e) => onUpdateElement({ ...selectedElement, fontFamily: e.target.value as StandardFontFamily })}
-              className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              style={{ fontFamily: getCssFontFamily(selectedElement.fontFamily) }}
-            >
-              {fontFamilies.map((font) => (
-                <option key={font} value={font} style={{ fontFamily: getCssFontFamily(font) }}>
-                  {font}
-                </option>
-              ))}
-            </select>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                Família da Fonte
+              </label>
+              <select
+                value={selectedElement.fontFamily}
+                onChange={(e) => onUpdateElement({ ...selectedElement, fontFamily: e.target.value as StandardFontFamily })}
+                className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                style={{ fontFamily: getCssFontFamily(selectedElement.fontFamily) }}
+              >
+                {fontFamilies.map((font) => (
+                  <option key={font} value={font} style={{ fontFamily: getCssFontFamily(font) }}>
+                    {font}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Formatting Bar: Bold, Italic & Text Alignment */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                Estilo & Formatação
+              </label>
+              <div className="flex space-x-1.5">
+                <button
+                  onClick={toggleBold}
+                  className={`flex-1 py-1.5 rounded-lg border text-xs font-bold flex justify-center items-center space-x-1 transition-all ${
+                    isBold
+                      ? 'bg-blue-600 border-blue-600 text-white shadow-sm'
+                      : 'border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100'
+                  }`}
+                  title="Alternar Negrito (Bold)"
+                >
+                  <Bold className="w-4 h-4" />
+                  <span>Negrito</span>
+                </button>
+                <button
+                  onClick={toggleItalic}
+                  className={`flex-1 py-1.5 rounded-lg border text-xs font-semibold italic flex justify-center items-center space-x-1 transition-all ${
+                    isItalic
+                      ? 'bg-blue-600 border-blue-600 text-white shadow-sm'
+                      : 'border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100'
+                  }`}
+                  title="Alternar Itálico (Italic)"
+                >
+                  <Italic className="w-4 h-4" />
+                  <span>Itálico</span>
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
@@ -177,9 +245,8 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
           </div>
         )}
 
-        {/* Colors & Background */}
+        {/* Colors & Whiteout Background */}
         <div className="grid grid-cols-2 gap-3">
-          {/* Text/Border Color */}
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center space-x-1">
               <Palette className="w-3.5 h-3.5" />
@@ -198,10 +265,10 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
             </div>
           </div>
 
-          {/* Background / Whiteout fill color */}
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-              Fundo / Cobertura
+            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center space-x-1">
+              <Square className="w-3.5 h-3.5 text-blue-500" />
+              <span>Fundo Branco</span>
             </label>
             <div className="flex items-center space-x-2">
               <input
@@ -211,10 +278,14 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
                 className="w-8 h-8 rounded-lg border border-slate-300 dark:border-slate-700 cursor-pointer p-0.5 bg-transparent"
               />
               <button
-                onClick={() => onUpdateElement({ ...selectedElement, backgroundColor: 'transparent' })}
-                className="px-2 py-1 text-[10px] font-semibold border rounded text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                onClick={() => onUpdateElement({ ...selectedElement, backgroundColor: selectedElement.backgroundColor === 'transparent' ? '#ffffff' : 'transparent' })}
+                className={`px-2 py-1 text-[10px] font-semibold border rounded transition-colors ${
+                  selectedElement.backgroundColor !== 'transparent'
+                    ? 'bg-blue-50 border-blue-400 text-blue-700 dark:bg-blue-950 dark:text-blue-300'
+                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100'
+                }`}
               >
-                Transp.
+                {selectedElement.backgroundColor !== 'transparent' ? 'Branco' : 'Transp.'}
               </button>
             </div>
           </div>

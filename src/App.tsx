@@ -104,7 +104,11 @@ export const App: React.FC = () => {
     reader.readAsArrayBuffer(file);
   };
 
-  const handleZoomIn = () => setZoom((z) => Math.min(2.5, +(z + 0.15).toFixed(2)));
+  const handleZoomChange = (newZoom: number) => {
+    setZoom(Math.min(3.0, Math.max(0.4, +newZoom.toFixed(2))));
+  };
+
+  const handleZoomIn = () => setZoom((z) => Math.min(3.0, +(z + 0.15).toFixed(2)));
   const handleZoomOut = () => setZoom((z) => Math.max(0.4, +(z - 0.15).toFixed(2)));
   const handleZoomReset = () => setZoom(1.0);
 
@@ -303,6 +307,7 @@ export const App: React.FC = () => {
       <Header
         fileName={fileName}
         zoom={zoom}
+        onZoomChange={handleZoomChange}
         onZoomIn={handleZoomIn}
         onZoomOut={handleZoomOut}
         onZoomReset={handleZoomReset}
@@ -352,6 +357,7 @@ export const App: React.FC = () => {
           onAddElement={handleAddElement}
           onUpdateElement={handleUpdateElement}
           onDeleteElement={handleDeleteElement}
+          onZoomChange={handleZoomChange}
         />
 
         <PropertyPanel

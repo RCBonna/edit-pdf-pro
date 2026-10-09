@@ -1,9 +1,8 @@
 import * as pdfjsLib from 'pdfjs-dist';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import type { ExtractedTextItem, PageMeta, PDFElement } from '../types/pdf';
-import { normalizeFontName } from './fontMapping';
+import { normalizeFontName, isFontNameBold } from './fontMapping';
 
-// Configure pdfjs worker to reliable CDN version matching current pdfjs-dist
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
 
 export interface PDFLoadResult {
@@ -14,7 +13,7 @@ export interface PDFLoadResult {
 }
 
 /**
- * Load PDF data buffer and extract pages + text content
+ * Load PDF data buffer and extract pages + text content with precise font and geometry detection
  */
 export async function loadPDF(arrayBuffer: ArrayBuffer): Promise<PDFLoadResult> {
   const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer.slice(0) });
@@ -34,7 +33,7 @@ export async function loadPDF(arrayBuffer: ArrayBuffer): Promise<PDFLoadResult> 
       pageIndex: i - 1,
       width: viewport.width,
       height: viewport.height,
-      rotation: viewport.rotation,
+      rotation: viewport.rotation || 0,
     });
 
     const textContent = await page.getTextContent();
@@ -43,13 +42,15 @@ export async function loadPDF(arrayBuffer: ArrayBuffer): Promise<PDFLoadResult> 
     let itemIdx = 0;
     for (const item of textContent.items) {
       if ('str' in item && item.str.trim().length > 0) {
-        const transform = item.transform;
+        const transform = item.transform; // [scaleX, skewY, skewX, scaleY, tx, ty]
         const tx = transform[4];
         const ty = transform[5];
         
         const fontSize = Math.round(Math.hypot(transform[0], transform[1]) || item.height || 12);
         const pdfY = viewport.height - ty - fontSize;
-        const fontNameMatch = normalizeFontName(item.fontName || '');
+        const fontName = item.fontName || 'Helvetica';
+        const isBold = isFontNameBold(fontName);
+        const fontNameMatch = normalizeFontName(fontName);
 
         textItems.push({
           id: `orig-text-${i - 1}-${itemIdx++}`,
@@ -59,8 +60,9 @@ export async function loadPDF(arrayBuffer: ArrayBuffer): Promise<PDFLoadResult> 
           width: item.width > 0 ? item.width : item.str.length * (fontSize * 0.55),
           height: item.height || fontSize * 1.2,
           fontSize: fontSize,
-          fontName: item.fontName || 'Helvetica',
+          fontName: fontName,
           fontFamilyMatch: fontNameMatch,
+          isBold: isBold,
           color: '#000000',
           transform: transform,
         });
@@ -152,21 +154,33 @@ export async function saveModifiedPDF(
     for (const el of pageElements) {
       const pdfY = pageHeight - el.y - el.height;
 
+      // 1. Cover original text box with solid whiteout background patch
       if (el.isOriginalText && el.backgroundColor) {
-        const coverY = pageHeight - (el.originalBoundingBox?.y || el.y) - (el.originalBoundingBox?.height || el.height);
+        const origBox = el.originalBoundingBox || { x: el.x, y: el.y, width: el.width, height: el.height };
+        const coverY = pageHeight - origBox.y - origBox.height;
+
         currentPage.drawRectangle({
-          x: el.originalBoundingBox?.x || el.x,
-          y: coverY,
-          width: el.originalBoundingBox?.width || el.width + 4,
-          height: (el.originalBoundingBox?.height || el.height) + 2,
+          x: Math.max(0, origBox.x - 3),
+          y: coverY - 2,
+          width: origBox.width + 6,
+          height: origBox.height + 4,
           color: hexToRgb(el.backgroundColor || '#ffffff'),
         });
       }
 
+      // 2. Render Text / Modified Text
       if (el.type === 'text' && el.content.trim().length > 0) {
-        const selectedFont = fonts[el.fontFamily as keyof typeof fonts] || fonts['Helvetica'];
+        let selectedFontKey = el.fontFamily;
+        if (el.fontWeight === 'bold' && !selectedFontKey.includes('Bold')) {
+          if (selectedFontKey.includes('Times')) selectedFontKey = 'Times-Bold';
+          else if (selectedFontKey.includes('Courier')) selectedFontKey = 'Courier-Bold';
+          else selectedFontKey = 'Helvetica-Bold';
+        }
+
+        const selectedFont = fonts[selectedFontKey as keyof typeof fonts] || fonts['Helvetica'];
         
-        if (el.backgroundColor && el.backgroundColor !== 'transparent') {
+        // Fill custom background if requested
+        if (el.backgroundColor && el.backgroundColor !== 'transparent' && !el.isOriginalText) {
           currentPage.drawRectangle({
             x: el.x,
             y: pdfY,
@@ -187,6 +201,7 @@ export async function saveModifiedPDF(
         });
       }
 
+      // 3. Form Text Input Field
       if (el.type === 'form-text') {
         const form = destDoc.getForm();
         const fieldName = el.fieldName || `TextField_${destIndex}_${el.id}`;
@@ -223,6 +238,7 @@ export async function saveModifiedPDF(
         }
       }
 
+      // 4. Form Checkbox
       if (el.type === 'form-checkbox') {
         const form = destDoc.getForm();
         const cbName = el.fieldName || `CheckBox_${destIndex}_${el.id}`;
@@ -251,6 +267,7 @@ export async function saveModifiedPDF(
         }
       }
 
+      // 5. Signature / Image
       if ((el.type === 'signature' || el.type === 'image') && el.content.startsWith('data:image')) {
         try {
           const imageBytes = base64ToUint8Array(el.content);
@@ -272,6 +289,7 @@ export async function saveModifiedPDF(
         }
       }
 
+      // 6. Shapes, Highlights & Redactions
       if (el.type === 'rect' || el.type === 'highlight' || el.type === 'redact') {
         currentPage.drawRectangle({
           x: el.x,
@@ -285,6 +303,7 @@ export async function saveModifiedPDF(
         });
       }
 
+      // 7. Stamp
       if (el.type === 'stamp') {
         currentPage.drawRectangle({
           x: el.x,

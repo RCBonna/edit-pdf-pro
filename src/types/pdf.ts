@@ -79,6 +79,7 @@ export interface ExtractedTextItem {
   fontSize: number;
   fontName: string;
   fontFamilyMatch: StandardFontFamily;
+  isBold: boolean;
   color: string;
   transform: number[];
 }
