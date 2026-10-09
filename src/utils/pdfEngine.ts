@@ -1,6 +1,6 @@
 import * as pdfjsLib from 'pdfjs-dist';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
-import type { ExtractedTextItem, PageMeta, PDFElement } from '../types/pdf';
+import type { ExtractedTextItem, PageMeta, PDFElement, PDFMetadata } from '../types/pdf';
 import { normalizeFontName, isFontNameBold } from './fontMapping';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
@@ -10,10 +10,11 @@ export interface PDFLoadResult {
   pdfLibDoc: PDFDocument;
   pages: PageMeta[];
   extractedTextByPage: Record<number, ExtractedTextItem[]>;
+  metadata: PDFMetadata;
 }
 
 /**
- * Load PDF data buffer and extract pages + text content with precise font and geometry detection
+ * Load PDF data buffer and extract pages, metadata + text content
  */
 export async function loadPDF(arrayBuffer: ArrayBuffer): Promise<PDFLoadResult> {
   const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer.slice(0) });
@@ -24,6 +25,25 @@ export async function loadPDF(arrayBuffer: ArrayBuffer): Promise<PDFLoadResult> 
   const numPages = pdfjsDoc.numPages;
   const pages: PageMeta[] = [];
   const extractedTextByPage: Record<number, ExtractedTextItem[]> = {};
+
+  const rawKeywords = pdfLibDoc.getKeywords();
+  const keywordsString = Array.isArray(rawKeywords)
+    ? rawKeywords.join(', ')
+    : typeof rawKeywords === 'string'
+    ? rawKeywords
+    : '';
+
+  // Extract Metadata from PDF
+  const metadata: PDFMetadata = {
+    title: pdfLibDoc.getTitle() || '',
+    author: pdfLibDoc.getAuthor() || '',
+    subject: pdfLibDoc.getSubject() || '',
+    keywords: keywordsString,
+    creator: pdfLibDoc.getCreator() || 'EditPDF Pro v1.0',
+    producer: pdfLibDoc.getProducer() || 'pdf-lib (https://github.com/Hopding/pdf-lib)',
+    creationDate: pdfLibDoc.getCreationDate()?.toISOString(),
+    modificationDate: pdfLibDoc.getModificationDate()?.toISOString() || new Date().toISOString(),
+  };
 
   for (let i = 1; i <= numPages; i++) {
     const page = await pdfjsDoc.getPage(i);
@@ -77,6 +97,7 @@ export async function loadPDF(arrayBuffer: ArrayBuffer): Promise<PDFLoadResult> 
     pdfLibDoc,
     pages,
     extractedTextByPage,
+    metadata,
   };
 }
 
@@ -109,16 +130,31 @@ export async function renderPageCanvas(
 }
 
 /**
- * Export and save modified PDF document with all new & modified elements
+ * Export and save modified PDF document with metadata & all elements
  */
 export async function saveModifiedPDF(
   originalPdfBuffer: ArrayBuffer,
   elements: PDFElement[],
   _pagesMeta: PageMeta[],
-  pageOrder: number[]
+  pageOrder: number[],
+  metadata?: PDFMetadata
 ): Promise<Uint8Array> {
   const srcDoc = await PDFDocument.load(originalPdfBuffer, { ignoreEncryption: true });
   const destDoc = await PDFDocument.create();
+
+  // Apply Document Metadata
+  if (metadata) {
+    if (metadata.title) destDoc.setTitle(metadata.title);
+    if (metadata.author) destDoc.setAuthor(metadata.author);
+    if (metadata.subject) destDoc.setSubject(metadata.subject);
+    if (metadata.keywords) {
+      const kwList = metadata.keywords.split(',').map((k) => k.trim()).filter(Boolean);
+      destDoc.setKeywords(kwList);
+    }
+    if (metadata.creator) destDoc.setCreator(metadata.creator);
+    if (metadata.producer) destDoc.setProducer(metadata.producer);
+    destDoc.setModificationDate(new Date());
+  }
 
   const fonts = {
     'Helvetica': await destDoc.embedFont(StandardFonts.Helvetica),
@@ -179,7 +215,6 @@ export async function saveModifiedPDF(
 
         const selectedFont = fonts[selectedFontKey as keyof typeof fonts] || fonts['Helvetica'];
         
-        // Fill custom background if requested
         if (el.backgroundColor && el.backgroundColor !== 'transparent' && !el.isOriginalText) {
           currentPage.drawRectangle({
             x: el.x,

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
-import type { ExtractedTextItem, PageMeta, PDFElement, StampType, ToolType } from './types/pdf';
+import type { ExtractedTextItem, PageMeta, PDFElement, PDFMetadata, StampType, ToolType } from './types/pdf';
 import { loadPDF, saveModifiedPDF } from './utils/pdfEngine';
 import { generateSamplePDF } from './utils/samplePdf';
 import { Header } from './components/Header';
@@ -10,6 +10,7 @@ import { PropertyPanel } from './components/PropertyPanel';
 import { PDFCanvas } from './components/PDFCanvas';
 import { SignatureModal } from './components/SignatureModal';
 import { PageManagerModal } from './components/PageManagerModal';
+import { MetadataModal } from './components/MetadataModal';
 
 export const App: React.FC = () => {
   const [fileName, setFileName] = useState<string>('Contrato_Exemplo.pdf');
@@ -19,6 +20,14 @@ export const App: React.FC = () => {
   const [pageOrder, setPageOrder] = useState<number[]>([]);
   const [currentPageIndex, setCurrentPageIndex] = useState<number>(0);
   const [extractedTextByPage, setExtractedTextByPage] = useState<Record<number, ExtractedTextItem[]>>({});
+  const [metadata, setMetadata] = useState<PDFMetadata>({
+    title: 'Contrato de Prestação de Serviços',
+    author: 'João Silva',
+    subject: 'Contrato Comercial',
+    keywords: 'contrato, pdf, editado',
+    creator: 'EditPDF Pro v1.0',
+    producer: 'pdf-lib',
+  });
 
   const [zoom, setZoom] = useState<number>(1.0);
   const [activeTool, setActiveTool] = useState<ToolType>('select');
@@ -29,6 +38,7 @@ export const App: React.FC = () => {
 
   const [isSignatureModalOpen, setIsSignatureModalOpen] = useState<boolean>(false);
   const [isPageManagerOpen, setIsPageManagerOpen] = useState<boolean>(false);
+  const [isMetadataModalOpen, setIsMetadataModalOpen] = useState<boolean>(false);
 
   const [history, setHistory] = useState<PDFElement[][]>([]);
   const [historyIndex, setHistoryIndex] = useState<number>(-1);
@@ -78,6 +88,7 @@ export const App: React.FC = () => {
       setPages(result.pages);
       setPageOrder(result.pages.map((p) => p.pageIndex));
       setExtractedTextByPage(result.extractedTextByPage);
+      setMetadata(result.metadata);
       setCurrentPageIndex(0);
       setElements([]);
       setHistory([[]]);
@@ -257,7 +268,7 @@ export const App: React.FC = () => {
     if (!pdfBuffer) return;
     try {
       setIsSaving(true);
-      const modifiedBytes = await saveModifiedPDF(pdfBuffer, elements, pages, pageOrder);
+      const modifiedBytes = await saveModifiedPDF(pdfBuffer, elements, pages, pageOrder, metadata);
       
       const blob = new Blob([modifiedBytes], { type: 'application/pdf' });
       const url = URL.createObjectURL(blob);
@@ -278,6 +289,7 @@ export const App: React.FC = () => {
 
   const selectedElement = elements.find((el) => el.id === selectedElementId) || null;
 
+  // Keyboard shortcut listener (Ctrl+Z, Ctrl+Y, Delete & Arrow Key Nudging)
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       const activeTag = (document.activeElement?.tagName || '').toLowerCase();
@@ -292,9 +304,27 @@ export const App: React.FC = () => {
       } else if (e.key === 'Delete' && selectedElementId) {
         e.preventDefault();
         handleDeleteElement(selectedElementId);
+      } else if (
+        selectedElement &&
+        ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)
+      ) {
+        e.preventDefault();
+        const step = e.shiftKey ? 10 : 1; // 1pt nudge or 10pt with Shift key
+        let dx = 0;
+        let dy = 0;
+        if (e.key === 'ArrowUp') dy = -step;
+        if (e.key === 'ArrowDown') dy = step;
+        if (e.key === 'ArrowLeft') dx = -step;
+        if (e.key === 'ArrowRight') dx = step;
+
+        handleUpdateElement({
+          ...selectedElement,
+          x: Math.max(0, selectedElement.x + dx),
+          y: Math.max(0, selectedElement.y + dy),
+        });
       }
     },
-    [historyIndex, history, selectedElementId]
+    [historyIndex, history, selectedElementId, selectedElement]
   );
 
   useEffect(() => {
@@ -319,6 +349,7 @@ export const App: React.FC = () => {
         onLoadSample={loadSampleDocument}
         onSavePDF={handleSavePDF}
         onOpenPageManager={() => setIsPageManagerOpen(true)}
+        onOpenMetadataModal={() => setIsMetadataModalOpen(true)}
         isSaving={isSaving}
         darkMode={darkMode}
         onToggleDarkMode={() => setDarkMode(!darkMode)}
@@ -387,6 +418,13 @@ export const App: React.FC = () => {
         onRotatePage={handleRotatePage}
         onDeletePage={handleDeletePage}
         onAddBlankPage={handleAddBlankPage}
+      />
+
+      <MetadataModal
+        isOpen={isMetadataModalOpen}
+        metadata={metadata}
+        onClose={() => setIsMetadataModalOpen(false)}
+        onSaveMetadata={setMetadata}
       />
     </div>
   );

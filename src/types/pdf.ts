@@ -92,4 +92,15 @@ export interface PageMeta {
   thumbnailUrl?: string;
 }
 
+export interface PDFMetadata {
+  title: string;
+  author: string;
+  subject: string;
+  keywords: string;
+  creator: string;
+  producer: string;
+  creationDate?: string;
+  modificationDate?: string;
+}
+
 export type StampType = 'APROVADO' | 'REJEITADO' | 'CONFIDENCIAL' | 'PAGO' | 'RASCUNHO' | 'COPIA';
