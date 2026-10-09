@@ -65,9 +65,10 @@ export async function loadPDF(arrayBuffer: ArrayBuffer): Promise<PDFLoadResult> 
         // Transform item matrix by viewport matrix to get true absolute page coordinates (top-left origin)
         const pageTransform = pdfjsLib.Util.transform(viewport.transform, item.transform);
         const absX = pageTransform[4];
-        const absY = pageTransform[5]; // Baseline Y from top of page
+        const absY = pageTransform[5]; // Baseline Y from top
         
         const fontSize = Math.round(Math.hypot(item.transform[0], item.transform[1]) || item.height || 12);
+        // Exact topY of text bounding box with zero top padding
         const topY = Math.max(0, absY - fontSize);
         const fontName = item.fontName || 'Helvetica';
         const isBold = isFontNameBold(fontName);
@@ -79,7 +80,7 @@ export async function loadPDF(arrayBuffer: ArrayBuffer): Promise<PDFLoadResult> 
           x: Math.max(0, absX),
           y: Math.max(0, topY),
           width: item.width > 0 ? item.width : item.str.length * (fontSize * 0.55),
-          height: item.height || fontSize * 1.2,
+          height: fontSize, // Exact line height (0px vertical padding for tight table rows)
           fontSize: fontSize,
           fontName: fontName,
           fontFamilyMatch: fontNameMatch,
@@ -131,7 +132,7 @@ export async function renderPageCanvas(
 }
 
 /**
- * Export and save modified PDF document with user-customized metadata & all elements
+ * Export and save modified PDF document with metadata & all elements
  */
 export async function saveModifiedPDF(
   originalPdfBuffer: ArrayBuffer,
@@ -143,7 +144,7 @@ export async function saveModifiedPDF(
   const srcDoc = await PDFDocument.load(originalPdfBuffer, { ignoreEncryption: true });
   const destDoc = await PDFDocument.create();
 
-  // Apply Document Metadata including User Custom Creation & Modification Dates
+  // Apply Document Metadata
   if (metadata) {
     if (metadata.title) destDoc.setTitle(metadata.title);
     if (metadata.author) destDoc.setAuthor(metadata.author);
@@ -199,7 +200,7 @@ export async function saveModifiedPDF(
     for (const el of pageElements) {
       const pdfY = pageHeight - el.y - el.height;
 
-      // 1. Cover original text box with solid whiteout background patch
+      // 1. Cover original text box with solid whiteout background patch (ZERO VERTICAL PADDING to prevent overlapping lines above/below)
       if (el.isOriginalText && el.backgroundColor) {
         const origBox = el.originalBoundingBox;
         const useOrig = origBox && Math.abs(origBox.y - el.y) < 15 && Math.abs(origBox.x - el.x) < 20;
@@ -209,13 +210,14 @@ export async function saveModifiedPDF(
         const boxW = Math.max(el.width, useOrig ? origBox.width : 0);
         const boxH = Math.max(el.height, useOrig ? origBox.height : 0);
 
-        const coverY = pageHeight - boxY - boxH;
+        const padY = el.paddingY ?? 0;
+        const coverY = pageHeight - (boxY + padY) - boxH;
 
         currentPage.drawRectangle({
           x: Math.max(0, boxX - 1),
-          y: Math.max(0, coverY - 1),
+          y: Math.max(0, coverY),
           width: boxW + 2,
-          height: boxH + 2,
+          height: boxH + (padY * 2),
           color: hexToRgb(el.backgroundColor || '#ffffff'),
         });
       }
@@ -241,7 +243,7 @@ export async function saveModifiedPDF(
           });
         }
 
-        const textY = pdfY + (el.height * 0.2);
+        const textY = pdfY + (el.height * 0.15);
 
         currentPage.drawText(el.content, {
           x: el.x,

@@ -51,6 +51,7 @@ export interface PDFElement {
   fontStyle?: 'normal' | 'italic';
   textAlign?: 'left' | 'center' | 'right';
   opacity?: number;
+  paddingY?: number; // Vertical padding (default 0 for tight table alignment)
 
   // Border styling
   borderColor?: string;

@@ -54,7 +54,6 @@ export const PDFCanvas: React.FC<PDFCanvasProps> = ({
     }
   }, [pdfjsDoc, currentPageIndex, currentPageMeta, zoom]);
 
-  // Handle Ctrl + MouseWheel Zoom
   const handleWheel = (e: React.WheelEvent) => {
     if (e.ctrlKey || e.metaKey) {
       e.preventDefault();
@@ -88,7 +87,8 @@ export const PDFCanvas: React.FC<PDFCanvasProps> = ({
         x: clickX,
         y: clickY,
         width: 180,
-        height: 30,
+        height: 24,
+        paddingY: 0,
         content: 'Digite seu texto aqui',
         fontFamily: 'Helvetica',
         fontSize: 14,
@@ -108,7 +108,8 @@ export const PDFCanvas: React.FC<PDFCanvasProps> = ({
         x: clickX,
         y: clickY,
         width: 160,
-        height: 28,
+        height: 24,
+        paddingY: 0,
         content: '',
         fieldName: `CampoTexto_${currentPageIndex + 1}_${Date.now().toString().slice(-4)}`,
         fontFamily: 'Helvetica',
@@ -128,8 +129,8 @@ export const PDFCanvas: React.FC<PDFCanvasProps> = ({
         type: 'form-checkbox',
         x: clickX,
         y: clickY,
-        width: 20,
-        height: 20,
+        width: 18,
+        height: 18,
         content: 'true',
         fieldName: `CheckBox_${currentPageIndex + 1}_${Date.now().toString().slice(-4)}`,
         fontFamily: 'Helvetica',
@@ -148,7 +149,7 @@ export const PDFCanvas: React.FC<PDFCanvasProps> = ({
         x: clickX,
         y: clickY,
         width: 150,
-        height: 20,
+        height: 18,
         content: '',
         fontFamily: 'Helvetica',
         fontSize: 12,
@@ -166,7 +167,7 @@ export const PDFCanvas: React.FC<PDFCanvasProps> = ({
         x: clickX,
         y: clickY,
         width: 140,
-        height: 24,
+        height: 18,
         content: '',
         fontFamily: 'Helvetica',
         fontSize: 12,
@@ -183,7 +184,7 @@ export const PDFCanvas: React.FC<PDFCanvasProps> = ({
         x: clickX,
         y: clickY,
         width: 160,
-        height: 100,
+        height: 80,
         content: '',
         fontFamily: 'Helvetica',
         fontSize: 12,
@@ -209,21 +210,25 @@ export const PDFCanvas: React.FC<PDFCanvasProps> = ({
 
     const isBold = item.isBold;
 
+    // Tight 0px vertical padding height matching line height perfectly
+    const tightHeight = Math.max(item.fontSize, Math.round(item.height));
+
     const newEditableText: PDFElement = {
       id: `edit-orig-${Date.now()}`,
       pageIndex: currentPageIndex,
       type: 'text',
-      x: Math.max(0, item.x - 2),
-      y: Math.max(0, item.y - 1),
-      width: Math.max(item.width + 6, 60),
-      height: item.height + 4,
+      x: item.x,
+      y: item.y,
+      width: Math.max(item.width + 2, 40),
+      height: tightHeight,
+      paddingY: 0,
       content: item.text,
       fontFamily: isBold ? (item.fontFamilyMatch.includes('Times') ? 'Times-Bold' : 'Helvetica-Bold') : item.fontFamilyMatch,
       fontSize: item.fontSize,
       fontWeight: isBold ? 'bold' : 'normal',
       fontStyle: 'normal',
       color: item.color || '#000000',
-      backgroundColor: '#ffffff', // Opaque whitepatch covering underlying PDF canvas text!
+      backgroundColor: '#ffffff',
       isOriginalText: true,
       originalText: item.text,
       originalFontName: item.fontName,
@@ -231,7 +236,7 @@ export const PDFCanvas: React.FC<PDFCanvasProps> = ({
         x: item.x,
         y: item.y,
         width: item.width,
-        height: item.height,
+        height: tightHeight,
       },
     };
 
@@ -321,14 +326,14 @@ export const PDFCanvas: React.FC<PDFCanvasProps> = ({
               style={{
                 left: `${item.x * zoom}px`,
                 top: `${item.y * zoom}px`,
-                width: `${Math.max(item.width, 30) * zoom}px`,
-                height: `${item.height * zoom}px`,
+                width: `${Math.max(item.width, 25) * zoom}px`,
+                height: `${Math.max(item.fontSize, item.height) * zoom}px`,
               }}
-              className="extracted-text-box absolute border border-transparent hover:border-blue-500 hover:bg-blue-500/15 cursor-pointer transition-all rounded-sm z-10 group"
-              title={`Clique para editar este texto (Fonte: ${item.fontName || 'Helvetica'}, ${item.isBold ? 'Negrito' : 'Normal'})`}
+              className="extracted-text-box absolute border border-transparent hover:border-blue-500 hover:bg-blue-500/15 cursor-pointer transition-all rounded-none z-10 group"
+              title={`Clique para editar este texto (${item.text})`}
             >
               <span className="opacity-0 group-hover:opacity-100 absolute -top-5 left-0 text-[10px] bg-blue-600 text-white px-1.5 py-0.5 rounded shadow-md pointer-events-none whitespace-nowrap z-30">
-                Editar {item.isBold ? 'Negrito' : ''} ({item.fontFamilyMatch})
+                Editar ({item.fontFamilyMatch})
               </span>
             </div>
           );
@@ -340,6 +345,7 @@ export const PDFCanvas: React.FC<PDFCanvasProps> = ({
           const isEditingInline = el.id === editingInlineId;
           const isBold = el.fontWeight === 'bold' || el.fontFamily.includes('Bold');
           const isItalic = el.fontStyle === 'italic' || el.fontFamily.includes('Oblique');
+          const padY = (el.paddingY ?? 0) * zoom;
 
           return (
             <div
@@ -353,9 +359,9 @@ export const PDFCanvas: React.FC<PDFCanvasProps> = ({
               }}
               style={{
                 left: `${el.x * zoom}px`,
-                top: `${el.y * zoom}px`,
+                top: `${(el.y - (el.paddingY ?? 0)) * zoom}px`,
                 width: `${el.width * zoom}px`,
-                height: `${el.height * zoom}px`,
+                height: `${(el.height + (el.paddingY ?? 0) * 2) * zoom}px`,
                 backgroundColor: el.backgroundColor === 'transparent' ? 'transparent' : (el.backgroundColor || '#ffffff'),
                 borderColor: el.borderColor || (isSelected ? '#2563eb' : 'transparent'),
                 borderWidth: `${(el.borderWidth || (isSelected ? 1.5 : 0)) * zoom}px`,
@@ -363,12 +369,12 @@ export const PDFCanvas: React.FC<PDFCanvasProps> = ({
               }}
               className={`pdf-element absolute flex items-center transition-all cursor-move z-20 ${
                 isSelected
-                  ? 'ring-2 ring-blue-500 ring-offset-1 shadow-md'
+                  ? 'ring-2 ring-blue-500 shadow-sm'
                   : 'hover:ring-1 hover:ring-blue-300'
               }`}
             >
               {el.type === 'text' && (
-                <div className="w-full h-full flex items-center px-1">
+                <div className="w-full h-full flex items-center px-0.5">
                   {isEditingInline ? (
                     <input
                       type="text"
@@ -386,8 +392,9 @@ export const PDFCanvas: React.FC<PDFCanvasProps> = ({
                         fontStyle: isItalic ? 'italic' : 'normal',
                         color: el.color,
                         textAlign: el.textAlign || 'left',
+                        lineHeight: 1.0,
                       }}
-                      className="w-full h-full bg-white border border-blue-500 rounded px-1 outline-none"
+                      className="w-full h-full bg-white border border-blue-500 rounded-none px-0.5 outline-none"
                     />
                   ) : (
                     <span
@@ -398,9 +405,9 @@ export const PDFCanvas: React.FC<PDFCanvasProps> = ({
                         fontStyle: isItalic ? 'italic' : 'normal',
                         color: el.color,
                         textAlign: el.textAlign || 'left',
-                        lineHeight: 1.1,
+                        lineHeight: 1.0,
                       }}
-                      className="w-full truncate"
+                      className="w-full truncate leading-none"
                     >
                       {el.content}
                     </span>
@@ -409,7 +416,7 @@ export const PDFCanvas: React.FC<PDFCanvasProps> = ({
               )}
 
               {el.type === 'form-text' && (
-                <div className="w-full h-full flex items-center px-2 bg-white/90 border border-blue-500/80 rounded text-slate-800">
+                <div className="w-full h-full flex items-center px-1 bg-white/90 border border-blue-500/80 rounded-none text-slate-800">
                   <input
                     type="text"
                     placeholder={el.fieldName || 'Campo de formulário'}
@@ -419,18 +426,18 @@ export const PDFCanvas: React.FC<PDFCanvasProps> = ({
                       fontSize: `${el.fontSize * zoom}px`,
                       fontWeight: isBold ? '700' : '400',
                     }}
-                    className="w-full bg-transparent outline-none text-slate-900 font-medium"
+                    className="w-full bg-transparent outline-none text-slate-900 font-medium leading-none"
                   />
                 </div>
               )}
 
               {el.type === 'form-checkbox' && (
-                <div className="w-full h-full flex items-center justify-center border-2 border-blue-600 bg-white rounded cursor-pointer">
+                <div className="w-full h-full flex items-center justify-center border-2 border-blue-600 bg-white rounded-none cursor-pointer">
                   <input
                     type="checkbox"
                     checked={el.content === 'true'}
                     onChange={(e) => onUpdateElement({ ...el, content: e.target.checked ? 'true' : 'false' })}
-                    className="w-4 h-4 accent-blue-600 cursor-pointer"
+                    className="w-3.5 h-3.5 accent-blue-600 cursor-pointer"
                   />
                 </div>
               )}
@@ -458,10 +465,10 @@ export const PDFCanvas: React.FC<PDFCanvasProps> = ({
 
               {isSelected && (
                 <>
-                  <div className="absolute -top-1.5 -left-1.5 w-3 h-3 bg-white border-2 border-blue-600 rounded-full" />
-                  <div className="absolute -top-1.5 -right-1.5 w-3 h-3 bg-white border-2 border-blue-600 rounded-full" />
-                  <div className="absolute -bottom-1.5 -left-1.5 w-3 h-3 bg-white border-2 border-blue-600 rounded-full" />
-                  <div className="absolute -bottom-1.5 -right-1.5 w-3 h-3 bg-white border-2 border-blue-600 rounded-full" />
+                  <div className="absolute -top-1 -left-1 w-2.5 h-2.5 bg-white border-2 border-blue-600 rounded-full" />
+                  <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-white border-2 border-blue-600 rounded-full" />
+                  <div className="absolute -bottom-1 -left-1 w-2.5 h-2.5 bg-white border-2 border-blue-600 rounded-full" />
+                  <div className="absolute -bottom-1 -right-1 w-2.5 h-2.5 bg-white border-2 border-blue-600 rounded-full" />
                 </>
               )}
             </div>
