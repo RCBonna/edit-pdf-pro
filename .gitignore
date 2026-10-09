@@ -36,3 +36,9 @@ dist-ssr
 
 # Temporary files
 .tmp
+*.mjs
+
+# Generated Sample & User PDF files (Excluded from Git)
+*.pdf
+Docs/*.pdf
+Docs/
