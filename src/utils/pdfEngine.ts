@@ -131,6 +131,28 @@ export async function renderPageCanvas(
   await page.render(renderContext).promise;
 }
 
+const convertToPngDataUrl = (dataUrl: string): Promise<string> => {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth || img.width || 200;
+      canvas.height = img.naturalHeight || img.height || 200;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0);
+        resolve(canvas.toDataURL('image/png'));
+      } else {
+        resolve(dataUrl);
+      }
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+};
+
 /**
  * Export and save modified PDF document with metadata & all elements
  */
@@ -323,11 +345,29 @@ export async function saveModifiedPDF(
       // 5. Signature / Image
       if ((el.type === 'signature' || el.type === 'image') && el.content.startsWith('data:image')) {
         try {
-          const imageBytes = base64ToUint8Array(el.content);
+          // If background color is specified and NOT transparent, draw background rectangle behind image
+          if (el.backgroundColor && el.backgroundColor !== 'transparent') {
+            currentPage.drawRectangle({
+              x: el.x,
+              y: pdfY,
+              width: el.width,
+              height: el.height,
+              color: hexToRgb(el.backgroundColor),
+            });
+          }
+
+          let imageBytes: Uint8Array;
           let embeddedImage;
+
           if (el.content.includes('data:image/png')) {
+            imageBytes = base64ToUint8Array(el.content);
+            embeddedImage = await destDoc.embedPng(imageBytes);
+          } else if (el.content.includes('data:image/webp') || el.content.includes('data:image/svg') || el.content.includes('data:image/gif')) {
+            const pngDataUrl = await convertToPngDataUrl(el.content);
+            imageBytes = base64ToUint8Array(pngDataUrl);
             embeddedImage = await destDoc.embedPng(imageBytes);
           } else {
+            imageBytes = base64ToUint8Array(el.content);
             embeddedImage = await destDoc.embedJpg(imageBytes);
           }
 

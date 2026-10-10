@@ -362,7 +362,11 @@ export const PDFCanvas: React.FC<PDFCanvasProps> = ({
                 top: `${(el.y - (el.paddingY ?? 0)) * zoom}px`,
                 width: `${el.width * zoom}px`,
                 height: `${(el.height + (el.paddingY ?? 0) * 2) * zoom}px`,
-                backgroundColor: el.backgroundColor === 'transparent' ? 'transparent' : (el.backgroundColor || '#ffffff'),
+                backgroundColor: el.backgroundColor === 'transparent'
+                  ? 'transparent'
+                  : (el.type === 'image' || el.type === 'signature'
+                      ? (el.backgroundColor || 'transparent')
+                      : (el.backgroundColor || '#ffffff')),
                 borderColor: el.borderColor || (isSelected ? '#2563eb' : 'transparent'),
                 borderWidth: `${(el.borderWidth || (isSelected ? 1.5 : 0)) * zoom}px`,
                 opacity: el.opacity ?? 1,

@@ -14,7 +14,9 @@ import {
   Sun,
   Maximize2,
   Info,
+  History,
 } from 'lucide-react';
+import { APP_VERSION } from '../utils/version';
 
 interface HeaderProps {
   fileName: string;
@@ -32,6 +34,8 @@ interface HeaderProps {
   onSavePDF: () => void;
   onOpenPageManager: () => void;
   onOpenMetadataModal: () => void;
+  onOpenRecentFiles: () => void;
+  recentCount: number;
   isSaving: boolean;
   darkMode: boolean;
   onToggleDarkMode: () => void;
@@ -53,6 +57,8 @@ export const Header: React.FC<HeaderProps> = ({
   onSavePDF,
   onOpenPageManager,
   onOpenMetadataModal,
+  onOpenRecentFiles,
+  recentCount,
   isSaving,
   darkMode,
   onToggleDarkMode,
@@ -69,17 +75,20 @@ export const Header: React.FC<HeaderProps> = ({
 
   return (
     <header className="app-header flex items-center justify-between px-4 py-2.5 border-b shadow-sm select-none">
-      {/* Left section: App Brand & Document Title */}
+      {/* Left section: App Brand & System Version & Document Title */}
       <div className="flex items-center space-x-3">
         <div className="brand-badge flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold text-sm shadow-md">
           <FileText className="w-4 h-4" />
           <span>EditPDF Pro</span>
+          <span className="text-[10px] font-mono bg-white/20 px-1.5 py-0.5 rounded-full font-normal">
+            v{APP_VERSION}
+          </span>
         </div>
 
         <div className="h-5 w-[1px] bg-slate-300 dark:bg-slate-700 mx-1" />
 
         <div className="flex items-center space-x-2 max-w-xs sm:max-w-md truncate">
-          <span className="text-sm font-medium text-slate-700 dark:text-slate-200 truncate">
+          <span className="text-sm font-medium text-slate-700 dark:text-slate-200 truncate" title={fileName}>
             {fileName || 'Documento Sem Nome.pdf'}
           </span>
           <button
@@ -112,7 +121,7 @@ export const Header: React.FC<HeaderProps> = ({
         <button
           onClick={onUndo}
           disabled={!canUndo}
-          className="btn-icon p-1.5 rounded-lg disabled:opacity-40 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
+          className="btn-icon p-1.5 rounded-lg disabled:opacity-40 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
           title="Desfazer (Ctrl+Z)"
         >
           <RotateCcw className="w-4 h-4" />
@@ -120,7 +129,7 @@ export const Header: React.FC<HeaderProps> = ({
         <button
           onClick={onRedo}
           disabled={!canRedo}
-          className="btn-icon p-1.5 rounded-lg disabled:opacity-40 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
+          className="btn-icon p-1.5 rounded-lg disabled:opacity-40 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
           title="Refazer (Ctrl+Y)"
         >
           <RotateCw className="w-4 h-4" />
@@ -187,22 +196,25 @@ export const Header: React.FC<HeaderProps> = ({
         </button>
       </div>
 
-      {/* Right Section: Samples, Theme Toggle & Download Button */}
+      {/* Right Section: Recent Files, Theme Toggle & Download Button */}
       <div className="flex items-center space-x-2">
-        <div className="hidden md:flex items-center space-x-1">
-          <button
-            onClick={() => onLoadSample('contract')}
-            className="flex items-center space-x-1 px-2.5 py-1.5 text-xs font-medium text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 border border-indigo-200 dark:border-indigo-900 rounded-lg transition-colors"
-            title="Carregar exemplo de contrato"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-indigo-500" />
-            <span>Exemplo Contrato</span>
-          </button>
-        </div>
+        <button
+          onClick={onOpenRecentFiles}
+          className="flex items-center space-x-1 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 rounded-xl transition-colors relative"
+          title="Ver histórico dos 10 últimos arquivos recentes"
+        >
+          <History className="w-3.5 h-3.5 text-blue-500" />
+          <span>Recentes</span>
+          {recentCount > 0 && (
+            <span className="ml-1 px-1.5 py-0.2 bg-blue-600 text-white text-[10px] font-bold rounded-full">
+              {recentCount}
+            </span>
+          )}
+        </button>
 
         <button
           onClick={() => fileInputRef.current?.click()}
-          className="hidden sm:flex items-center space-x-1 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 rounded-lg"
+          className="hidden sm:flex items-center space-x-1 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 rounded-xl"
         >
           <FilePlus className="w-3.5 h-3.5" />
           <span>Abrir PDF</span>

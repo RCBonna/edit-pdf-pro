@@ -3,6 +3,15 @@ import * as pdfjsLib from 'pdfjs-dist';
 import type { ExtractedTextItem, PageMeta, PDFElement, PDFMetadata, StampType, ToolType } from './types/pdf';
 import { loadPDF, saveModifiedPDF } from './utils/pdfEngine';
 import { generateSamplePDF } from './utils/samplePdf';
+import {
+  RecentFile,
+  getRecentFiles,
+  saveRecentFile,
+  loadRecentFileBuffer,
+  deleteRecentFile,
+  clearRecentFiles,
+} from './utils/recentFiles';
+import { APP_VERSION } from './utils/version';
 import { Header } from './components/Header';
 import { Toolbar } from './components/Toolbar';
 import { PageSidebar } from './components/PageSidebar';
@@ -11,6 +20,9 @@ import { PDFCanvas } from './components/PDFCanvas';
 import { SignatureModal } from './components/SignatureModal';
 import { PageManagerModal } from './components/PageManagerModal';
 import { MetadataModal } from './components/MetadataModal';
+import { RecentFilesModal } from './components/RecentFilesModal';
+
+const MAX_UNDO_STEPS = 10;
 
 export const App: React.FC = () => {
   const [fileName, setFileName] = useState<string>('Contrato_Exemplo.pdf');
@@ -25,7 +37,7 @@ export const App: React.FC = () => {
     author: 'João Silva',
     subject: 'Contrato Comercial',
     keywords: 'contrato, pdf, editado',
-    creator: 'EditPDF Pro v1.0',
+    creator: `EditPDF Pro v${APP_VERSION}`,
     producer: 'pdf-lib',
   });
 
@@ -39,12 +51,18 @@ export const App: React.FC = () => {
   const [isSignatureModalOpen, setIsSignatureModalOpen] = useState<boolean>(false);
   const [isPageManagerOpen, setIsPageManagerOpen] = useState<boolean>(false);
   const [isMetadataModalOpen, setIsMetadataModalOpen] = useState<boolean>(false);
+  const [isRecentFilesOpen, setIsRecentFilesOpen] = useState<boolean>(false);
+  const [recentFilesList, setRecentFilesList] = useState<RecentFile[]>([]);
 
-  const [history, setHistory] = useState<PDFElement[][]>([]);
-  const [historyIndex, setHistoryIndex] = useState<number>(-1);
+  // Undo / Redo history state (Max 10 steps)
+  const [history, setHistory] = useState<PDFElement[][]>([[]]);
+  const [historyIndex, setHistoryIndex] = useState<number>(0);
 
   useEffect(() => {
-    loadSampleDocument('contract');
+    // Load recent files metadata from storage
+    const loadedRecents = getRecentFiles();
+    setRecentFilesList(loadedRecents);
+    loadSampleDocument('contract', false);
   }, []);
 
   useEffect(() => {
@@ -56,29 +74,40 @@ export const App: React.FC = () => {
   }, [darkMode]);
 
   const pushHistory = (newElements: PDFElement[]) => {
-    const nextHistory = history.slice(0, historyIndex + 1);
-    nextHistory.push(newElements);
-    setHistory(nextHistory);
-    setHistoryIndex(nextHistory.length - 1);
+    setHistory((prevHistory) => {
+      const sliced = prevHistory.slice(0, historyIndex + 1);
+      const nextHistory = [...sliced, newElements];
+      
+      // Keep up to MAX_UNDO_STEPS + 1 baseline states (allowing 10 undo steps)
+      if (nextHistory.length > MAX_UNDO_STEPS + 1) {
+        const trimmed = nextHistory.slice(nextHistory.length - (MAX_UNDO_STEPS + 1));
+        setHistoryIndex(trimmed.length - 1);
+        return trimmed;
+      }
+      setHistoryIndex(nextHistory.length - 1);
+      return nextHistory;
+    });
   };
 
-  const handleUndo = () => {
+  const handleUndo = useCallback(() => {
     if (historyIndex > 0) {
       const prevIndex = historyIndex - 1;
       setElements(history[prevIndex]);
       setHistoryIndex(prevIndex);
+      setSelectedElementId(null);
     }
-  };
+  }, [historyIndex, history]);
 
-  const handleRedo = () => {
+  const handleRedo = useCallback(() => {
     if (historyIndex < history.length - 1) {
       const nextIndex = historyIndex + 1;
       setElements(history[nextIndex]);
       setHistoryIndex(nextIndex);
+      setSelectedElementId(null);
     }
-  };
+  }, [historyIndex, history]);
 
-  const loadPDFBuffer = async (buffer: ArrayBuffer, name: string) => {
+  const loadPDFBuffer = async (buffer: ArrayBuffer, name: string, saveToRecent: boolean = true) => {
     try {
       setPdfBuffer(buffer);
       setFileName(name);
@@ -93,26 +122,55 @@ export const App: React.FC = () => {
       setElements([]);
       setHistory([[]]);
       setHistoryIndex(0);
+
+      if (saveToRecent) {
+        const updatedRecents = await saveRecentFile(name, buffer);
+        setRecentFilesList(updatedRecents);
+      }
     } catch (err) {
       console.error('Error loading PDF file:', err);
       alert('Falha ao carregar o arquivo PDF. Verifique se o arquivo é válido.');
     }
   };
 
-  const loadSampleDocument = async (type: 'contract' | 'invoice') => {
+  const loadSampleDocument = async (type: 'contract' | 'invoice', saveToRecent: boolean = true) => {
     const sampleBytes = await generateSamplePDF(type);
     const sampleName = type === 'contract' ? 'Contrato_Prestacao_Servicos.pdf' : 'Fatura_Comercial.pdf';
-    await loadPDFBuffer(sampleBytes.buffer, sampleName);
+    await loadPDFBuffer(sampleBytes.buffer, sampleName, saveToRecent);
   };
 
   const handleFileUpload = (file: File) => {
     const reader = new FileReader();
     reader.onload = (e) => {
       if (e.target?.result instanceof ArrayBuffer) {
-        loadPDFBuffer(e.target.result, file.name);
+        loadPDFBuffer(e.target.result, file.name, true);
       }
     };
     reader.readAsArrayBuffer(file);
+  };
+
+  const handleSelectRecentFile = async (recentItem: RecentFile) => {
+    const buffer = await loadRecentFileBuffer(recentItem.id);
+    if (buffer) {
+      await loadPDFBuffer(buffer, recentItem.name, false);
+    } else {
+      alert('O conteúdo deste arquivo recente não está mais disponível no armazenamento local.');
+      const updated = await deleteRecentFile(recentItem.id);
+      setRecentFilesList(updated);
+    }
+  };
+
+  const handleDeleteRecentItem = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const updated = await deleteRecentFile(id);
+    setRecentFilesList(updated);
+  };
+
+  const handleClearRecentItems = async () => {
+    if (window.confirm('Tem certeza que deseja limpar todo o histórico de arquivos recentes?')) {
+      const updated = await clearRecentFiles();
+      setRecentFilesList(updated);
+    }
   };
 
   const handleZoomChange = (newZoom: number) => {
@@ -160,6 +218,7 @@ export const App: React.FC = () => {
             fontFamily: 'Helvetica',
             fontSize: 12,
             color: '#000000',
+            backgroundColor: 'transparent',
           };
           handleAddElement(newImg);
           setSelectedElementId(newImg.id);
@@ -210,6 +269,7 @@ export const App: React.FC = () => {
       fontFamily: 'Helvetica',
       fontSize: 12,
       color: '#000000',
+      backgroundColor: 'transparent',
     };
     handleAddElement(newSig);
     setSelectedElementId(newSig.id);
@@ -295,10 +355,14 @@ export const App: React.FC = () => {
       const activeTag = (document.activeElement?.tagName || '').toLowerCase();
       if (activeTag === 'input' || activeTag === 'textarea') return;
 
-      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
         e.preventDefault();
-        handleUndo();
-      } else if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
+        if (e.shiftKey) {
+          handleRedo();
+        } else {
+          handleUndo();
+        }
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
         e.preventDefault();
         handleRedo();
       } else if (e.key === 'Delete' && selectedElementId) {
@@ -324,7 +388,7 @@ export const App: React.FC = () => {
         });
       }
     },
-    [historyIndex, history, selectedElementId, selectedElement]
+    [handleUndo, handleRedo, selectedElementId, selectedElement]
   );
 
   useEffect(() => {
@@ -346,10 +410,12 @@ export const App: React.FC = () => {
         onUndo={handleUndo}
         onRedo={handleRedo}
         onFileUpload={handleFileUpload}
-        onLoadSample={loadSampleDocument}
+        onLoadSample={(type) => loadSampleDocument(type, true)}
         onSavePDF={handleSavePDF}
         onOpenPageManager={() => setIsPageManagerOpen(true)}
         onOpenMetadataModal={() => setIsMetadataModalOpen(true)}
+        onOpenRecentFiles={() => setIsRecentFilesOpen(true)}
+        recentCount={recentFilesList.length}
         isSaving={isSaving}
         darkMode={darkMode}
         onToggleDarkMode={() => setDarkMode(!darkMode)}
@@ -425,6 +491,21 @@ export const App: React.FC = () => {
         metadata={metadata}
         onClose={() => setIsMetadataModalOpen(false)}
         onSaveMetadata={setMetadata}
+      />
+
+      <RecentFilesModal
+        isOpen={isRecentFilesOpen}
+        onClose={() => setIsRecentFilesOpen(false)}
+        recentFiles={recentFilesList}
+        onSelectRecentFile={handleSelectRecentFile}
+        onDeleteRecentFile={handleDeleteRecentItem}
+        onClearRecentFiles={handleClearRecentItems}
+        onOpenFilePicker={() => {
+          const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+          if (fileInput) fileInput.click();
+        }}
+        onLoadSample={(type) => loadSampleDocument(type, true)}
+        currentFileName={fileName}
       />
     </div>
   );
